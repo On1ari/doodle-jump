@@ -1,13 +1,16 @@
 import React, { useEffect, useRef, useState } from 'react';
 
-const GRAVITY = 0.4;
+const GRAVITY = 0.3;
 const JUMP_VELOCITY = -10;
-const PLATFORM_WIDTH = 85;
-const PLATFORM_HEIGHT = 15;
+const PLATFORM_WIDTH = 65;
+const PLATFORM_HEIGHT = 12;
 const PLAYER_SIZE = 40;
 const GAME_WIDTH = 400;
 const GAME_HEIGHT = 600;
-const PLATFORM_COUNT = 5;
+const PLATFORM_COUNT = 7;
+
+const leftKeys = ['ArrowLeft', 'a', 'A', 'ф', 'Ф'];
+const rightKeys = ['ArrowRight', 'd', 'D', 'в', 'В'];
 
 type Platform = {
   x: number;
@@ -20,13 +23,19 @@ export const App: React.FC = () => {
   const [velocityY, setVelocityY] = useState(0);
   const [platforms, setPlatforms] = useState<Platform[]>([]);
   const [score, setScore] = useState(0);
-  const gameRef = useRef<HTMLDivElement>(null);
   const [isGameOver, setIsGameOver] = useState(false);
-  // const [movingLeft, setMovingLeft] = useState(false);
-  // const [movingRight, setMovingRight] = useState(false);
+  const [movingLeft, setMovingLeft] = useState(false);
+  const [movingRight, setMovingRight] = useState(false);
+  const [highScore, setHighScore] = useState(() => {
+    return parseInt(localStorage.getItem('highScore') || '0');
+  });
+  const [direction, setDirection] = useState<'left' | 'right'>('right');
+
+  const maxHeightRef = useRef(Infinity);
+  const gameRef = useRef<HTMLDivElement>(null);
 
   const handleRestart = () => {
-    window.location.reload(); // можно и вручную сбросить состояния
+    window.location.reload();
   };
 
   // Инициализация платформ
@@ -42,29 +51,63 @@ export const App: React.FC = () => {
     setPlatforms(initialPlatforms);
   }, []);
 
-  // Управление игроком стрелками влево/вправо
+  // Управление игроком влево/вправо
+
 
   useEffect(() => {
-    function handleKey(e: KeyboardEvent) {
-      if (e.key === 'ArrowLeft') {
-        setPlayerX((x) => Math.max(0, x - 20));
-      }
-      if (e.key === 'ArrowRight') {
-        setPlayerX((x) => Math.min(GAME_WIDTH - PLAYER_SIZE, x + 20));
-      }
+    function handleKeyDown(e: KeyboardEvent) {
+      const key = e.key;
+      if (leftKeys.includes(key)) setMovingLeft(true);
+      if (rightKeys.includes(key)) setMovingRight(true);
     }
-    window.addEventListener('keydown', handleKey);
-    return () => window.removeEventListener('keydown', handleKey);
+
+    function handleKeyUp(e: KeyboardEvent) {
+      const key = e.key;
+      if (leftKeys.includes(key)) setMovingLeft(false);
+      if (rightKeys.includes(key)) setMovingRight(false);
+    }
+
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+    };
   }, []);
+
+  // Начать заново при нажатии любой кнопки
+  useEffect(() => {
+    if (!isGameOver) return;
+
+    function handleAnyKey() {
+      handleRestart();
+    }
+
+    window.addEventListener('keydown', handleAnyKey);
+    return () => window.removeEventListener('keydown', handleAnyKey);
+  }, [isGameOver]);
 
   // Основной цикл игры
   useEffect(() => {
     const interval = setInterval(() => {
+      setPlayerX((x) => {
+        let newX = x;
+        if (movingLeft) {
+          newX = Math.max(0, x - 5);
+          setDirection('left');
+        }
+        if (movingRight) {
+          newX = Math.min(GAME_WIDTH - PLAYER_SIZE, x + 5);
+          setDirection('right');
+        }
+        return newX;
+      });
+
       setPlayerY((y) => {
         let newY = y + velocityY;
         setVelocityY((v) => v + GRAVITY);
 
-        // Если игрок падает на платформу, прыгаем
+        // Столкновение с платформами
         platforms.forEach((p) => {
           if (
             newY + PLAYER_SIZE >= p.y &&
@@ -74,11 +117,10 @@ export const App: React.FC = () => {
             velocityY > 0
           ) {
             setVelocityY(JUMP_VELOCITY);
-            setScore((s) => s + 1);
           }
         });
 
-        // Скроллим платформы вниз, когда игрок поднимается
+        // Скролл платформ
         if (newY < GAME_HEIGHT / 2) {
           const diff = (GAME_HEIGHT / 2) - newY;
           setPlatforms((oldPlatforms) =>
@@ -94,10 +136,22 @@ export const App: React.FC = () => {
           newY = GAME_HEIGHT / 2;
         }
 
-        // Проверка падения вниз - игра заканчивается
         if (newY > GAME_HEIGHT) {
           setIsGameOver(true);
+
+          setHighScore((prevHighScore) => {
+            const newHighScore = Math.max(prevHighScore, score);
+            localStorage.setItem('highScore', newHighScore.toString());
+            return newHighScore;
+          });
+
           return y;
+        }
+        if (maxHeightRef.current === Infinity) {
+          maxHeightRef.current = newY;
+        } else if (newY < maxHeightRef.current) {
+          setScore((prev) => prev + Math.floor(maxHeightRef.current - newY));
+          maxHeightRef.current = newY;
         }
 
         return newY;
@@ -105,7 +159,7 @@ export const App: React.FC = () => {
     }, 20);
 
     return () => clearInterval(interval);
-  }, [velocityY, platforms, playerX, score]);
+  }, [velocityY, platforms, playerX, score, movingLeft, movingRight]);
 
   return (
     <div
@@ -116,8 +170,9 @@ export const App: React.FC = () => {
         height: GAME_HEIGHT,
         border: '2px solid black',
         margin: '20px auto',
-        background: 'lightblue',
+        background: `url("/doodlejumpbg.png")`,
         overflow: 'hidden',
+        zIndex: 1,
       }}
     >
       {/* Игрок */}
@@ -126,14 +181,24 @@ export const App: React.FC = () => {
           position: 'absolute',
           width: PLAYER_SIZE,
           height: PLAYER_SIZE,
-          backgroundColor: 'green',
-          borderRadius: '50%',
           left: playerX,
           top: playerY,
-          transition: 'left 0.1s',
-          zIndex: 2,
+          zIndex: 100,
         }}
-      />
+      >
+        <img
+          src={direction === 'left' ? '/doodler-left.png' : '/doodler-right.png'}
+          alt="player"
+          style={{
+            width: '100%',
+            height: '100%',
+            userSelect: 'none',
+            pointerEvents: 'none',
+            display: 'block',
+          }}
+          draggable={false}
+        />
+      </div>
 
       {/* Платформы */}
       {platforms.map((p, i) => (
@@ -143,17 +208,25 @@ export const App: React.FC = () => {
             position: 'absolute',
             width: PLATFORM_WIDTH,
             height: PLATFORM_HEIGHT,
-            backgroundColor: 'brown',
+            backgroundColor: '#1be71b',
+            border: '1px solid black',
             left: p.x,
             top: p.y,
             borderRadius: 5,
-            zIndex: 1,
+            zIndex: 2,
           }}
         />
       ))}
 
       {/* Счет */}
-      <div style={{ position: 'absolute', top: 10, left: 10, fontWeight: 'bold' }}>
+      <div
+        style={{
+          position: 'absolute',
+          top: 10,
+          left: 10,
+          fontWeight: 'bold',
+          zIndex: 50
+        }}>
         Score: {score}
       </div>
       {isGameOver && (
@@ -165,7 +238,7 @@ export const App: React.FC = () => {
               left: 0,
               width: '100%',
               height: '100%',
-              backgroundColor: 'rgba(255, 255, 255, 0.9)',
+              backgroundColor: 'rgba(255, 255, 255)',
               zIndex: 999,
             }}
           />
@@ -186,6 +259,7 @@ export const App: React.FC = () => {
           >
             <h2>Игра окончена</h2>
             <p>Ваш счёт: {score}</p>
+            <p>Рекорд: {highScore}</p>
             <button
               onClick={handleRestart}
               style={{
