@@ -4,6 +4,7 @@ import {
   GAME_WIDTH,
   GRAVITY,
   JUMP_VELOCITY,
+  MOVE_SPEED,
   PLATFORM_HEIGHT,
   PLATFORM_WIDTH,
   PLAYER_SIZE,
@@ -64,70 +65,95 @@ const DoodleJump: React.FC = () => {
     return () => window.removeEventListener('keydown', restartOnKey);
   }, [isGameOver]);
 
+  function updatePlayerX(prevX: number): number {
+    let newX = prevX;
+    if (movingLeft) {
+      newX = prevX - MOVE_SPEED;
+      setDirection('left');
+    }
+    if (movingRight) {
+      newX = prevX + MOVE_SPEED;
+      setDirection('right');
+    }
+
+    // Обработка перехода за границу экрана
+    if (newX + PLAYER_SIZE < 0) {
+      newX = GAME_WIDTH;
+    } else if (newX > GAME_WIDTH) {
+      newX = -PLAYER_SIZE;
+    }
+    return newX;
+  }
+
+  function updatePlayerY(prevY: number): number {
+    let newY = prevY + velocityY;
+    playerWorldYRef.current += velocityY;
+    setVelocityY((v) => v + GRAVITY);
+
+    platforms.forEach((p) => {
+      if (isColliding(playerX, newY, velocityY, p, PLAYER_SIZE, PLATFORM_WIDTH, PLATFORM_HEIGHT)) {
+        setVelocityY(JUMP_VELOCITY);
+      }
+    });
+
+    if (newY < GAME_HEIGHT / 2) {
+      scrollWorld(GAME_HEIGHT / 2 - newY);
+      newY = GAME_HEIGHT / 2;
+    }
+
+    handleScoring();
+
+    if (newY > GAME_HEIGHT) {
+      endGame();
+      return prevY;
+    }
+
+    return newY;
+  }
+
+  function scrollWorld(diff: number) {
+    setPlatforms((old) =>
+      old.map((p) => {
+        let newY = p.y + diff;
+        if (newY > GAME_HEIGHT) {
+          newY = 0;
+          return { x: Math.random() * (GAME_WIDTH - PLATFORM_WIDTH), y: newY };
+        }
+        return { ...p, y: newY };
+      })
+    );
+  }
+
+  function handleScoring() {
+    if (maxHeightRef.current === Infinity) {
+      maxHeightRef.current = playerWorldYRef.current;
+    } else if (playerWorldYRef.current < maxHeightRef.current) {
+      const diff = maxHeightRef.current - playerWorldYRef.current;
+      if (diff >= 1) {
+        setScore((prev) => prev + Math.floor(diff));
+        maxHeightRef.current = playerWorldYRef.current;
+      }
+    }
+  }
+
+  function endGame() {
+    setIsGameOver(true);
+    setHighScore((prev) => {
+      const hs = Math.max(prev, score);
+      localStorage.setItem('highScore', hs.toString());
+      return hs;
+    });
+  }
+
   useEffect(() => {
     const interval = setInterval(() => {
-      setPlayerX((x) => {
-        let newX = x;
-        if (movingLeft) {
-          newX = Math.max(0, x - 5);
-          setDirection('left');
-        }
-        if (movingRight) {
-          newX = Math.min(GAME_WIDTH - PLAYER_SIZE, x + 5);
-          setDirection('right');
-        }
-        return newX;
-      });
-
-      setPlayerY((y) => {
-        let newY = y + velocityY;
-        playerWorldYRef.current += velocityY;
-        setVelocityY((v) => v + GRAVITY);
-
-        platforms.forEach((p) => {
-          if (isColliding(playerX, newY, velocityY, p, PLAYER_SIZE, PLATFORM_WIDTH, PLATFORM_HEIGHT)) {
-            setVelocityY(JUMP_VELOCITY);
-          }
-        });
-
-        if (newY < GAME_HEIGHT / 2) {
-          const diff = GAME_HEIGHT / 2 - newY;
-          setPlatforms((old) =>
-            old.map((p) => {
-              let newY = p.y + diff;
-              if (newY > GAME_HEIGHT) {
-                newY = 0;
-                return { x: Math.random() * (GAME_WIDTH - PLATFORM_WIDTH), y: newY };
-              }
-              return { ...p, y: newY };
-            })
-          );
-          newY = GAME_HEIGHT / 2;
-        }
-
-        if (newY > GAME_HEIGHT) {
-          setIsGameOver(true);
-          setHighScore((prev) => {
-            const hs = Math.max(prev, score);
-            localStorage.setItem('highScore', hs.toString());
-            return hs;
-          });
-          return y;
-        }
-
-        if (maxHeightRef.current === Infinity) {
-          maxHeightRef.current = playerWorldYRef.current;
-        } else if (playerWorldYRef.current < maxHeightRef.current) {
-          setScore((prev) => prev + Math.floor(maxHeightRef.current - playerWorldYRef.current));
-          maxHeightRef.current = playerWorldYRef.current;
-        }
-
-        return newY;
-      });
+      setPlayerX(updatePlayerX);
+      setPlayerY(updatePlayerY);
     }, TICK_RATE);
 
     return () => clearInterval(interval);
-  }, [velocityY, platforms, playerX, score, movingLeft, movingRight]);
+  }, [movingLeft, movingRight, velocityY, platforms, playerX, score]);
+
 
   return (
     <div
