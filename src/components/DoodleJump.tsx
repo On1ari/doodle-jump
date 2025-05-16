@@ -58,13 +58,6 @@ const DoodleJump: React.FC = () => {
     };
   }, []);
 
-  useEffect(() => {
-    if (!isGameOver) return;
-    const restartOnKey = () => handleRestart();
-    window.addEventListener('keydown', restartOnKey);
-    return () => window.removeEventListener('keydown', restartOnKey);
-  }, [isGameOver]);
-
   function updatePlayerX(prevX: number): number {
     let newX = prevX;
     if (movingLeft) {
