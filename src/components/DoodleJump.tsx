@@ -27,6 +27,7 @@ const DoodleJump: React.FC = () => {
   const [movingRight, setMovingRight] = useState(false);
   const [highScore, setHighScore] = useState(() => parseInt(localStorage.getItem('highScore') || '0'));
   const [direction, setDirection] = useState<Direction>('right');
+  const [isStarted, setIsStarted] = useState(false); // ➕ добавлено
 
   const maxHeightRef = useRef(Infinity);
   const playerWorldYRef = useRef(playerY);
@@ -39,7 +40,21 @@ const DoodleJump: React.FC = () => {
     setScore(0);
     setIsGameOver(false);
     maxHeightRef.current = Infinity;
+    setIsStarted(true); // ➕ запускаем игру при рестарте
   };
+
+  useEffect(() => {
+    const images = [
+      '/doodler-left.png',
+      '/doodler-right.png',
+      '/platform.png',
+      '/doodlejumpbg.png',
+    ];
+    images.forEach((src) => {
+      const img = new Image();
+      img.src = src;
+    });
+  }, []);
 
   useEffect(() => {
     const downHandler = (e: KeyboardEvent) => {
@@ -69,7 +84,6 @@ const DoodleJump: React.FC = () => {
       setDirection('right');
     }
 
-    // Обработка перехода за границу экрана
     if (newX + PLAYER_SIZE < 0) {
       newX = GAME_WIDTH;
     } else if (newX > GAME_WIDTH) {
@@ -139,14 +153,14 @@ const DoodleJump: React.FC = () => {
   }
 
   useEffect(() => {
+    if (!isStarted || isGameOver) return; // ➕ добавлено
     const interval = setInterval(() => {
       setPlayerX(updatePlayerX);
       setPlayerY(updatePlayerY);
     }, TICK_RATE);
 
     return () => clearInterval(interval);
-  }, [movingLeft, movingRight, velocityY, platforms, playerX, score]);
-
+  }, [isStarted, isGameOver, movingLeft, movingRight, velocityY, platforms, playerX, score]);
 
   return (
     <div
@@ -161,46 +175,82 @@ const DoodleJump: React.FC = () => {
         zIndex: 1,
       }}
     >
-      <div
-        style={{
-          position: 'absolute',
-          width: PLAYER_SIZE,
-          height: PLAYER_SIZE,
-          left: playerX,
-          top: playerY,
-          zIndex: 100,
-        }}
-      >
-        <img
-          src={direction === 'left' ? '/doodler-left.png' : '/doodler-right.png'}
-          alt="player"
-          style={{ width: '100%', height: '100%', userSelect: 'none', pointerEvents: 'none' }}
-          draggable={false}
-        />
-      </div>
-
-      {platforms.map((p, i) => (
-        <img
-          key={i}
-          src="/platform.png"
-          alt="platform"
+      {/* Кнопка "Начать игру" */}
+      {!isStarted && !isGameOver && (
+        <div
           style={{
             position: 'absolute',
-            width: PLATFORM_WIDTH,
-            height: PLATFORM_HEIGHT,
-            left: p.x,
-            top: p.y,
-            borderRadius: 5,
-            zIndex: 2,
-            objectFit: 'cover',
+            top: '40%',
+            left: '50%',
+            transform: 'translate(-50%, -50%)',
+            backgroundColor: 'white',
+            border: '2px solid black',
+            padding: 20,
+            textAlign: 'center',
+            zIndex: 1000,
+            borderRadius: 10,
           }}
-        />
-      ))}
+        >
+          <h2>Doodle Jump</h2>
+          <button
+            onClick={() => setIsStarted(true)}
+            style={{ marginTop: 10, padding: '10px 20px', fontWeight: 'bold', cursor: 'pointer' }}
+          >
+            Начать игру
+          </button>
+          <p style={{ marginTop: 5 }}>Ваш рекорд: {highScore}</p>
+        </div>
+      )}
 
-      <div style={{ position: 'absolute', top: 10, left: 10, fontWeight: 'bold', zIndex: 50 }}>
-        Score: {score}
-      </div>
+      {/* Игрок */}
+      {isStarted && (
+        <div
+          style={{
+            position: 'absolute',
+            width: PLAYER_SIZE,
+            height: PLAYER_SIZE,
+            left: playerX,
+            top: playerY,
+            zIndex: 100,
+          }}
+        >
+          <img
+            src={direction === 'left' ? '/doodler-left.png' : '/doodler-right.png'}
+            alt="player"
+            style={{ width: '100%', height: '100%', userSelect: 'none', pointerEvents: 'none' }}
+            draggable={false}
+          />
+        </div>
+      )}
 
+      {/* Платформы */}
+      {isStarted &&
+        platforms.map((p, i) => (
+          <img
+            key={i}
+            src="/platform.png"
+            alt="platform"
+            style={{
+              position: 'absolute',
+              width: PLATFORM_WIDTH,
+              height: PLATFORM_HEIGHT,
+              left: p.x,
+              top: p.y,
+              borderRadius: 5,
+              zIndex: 2,
+              objectFit: 'cover',
+            }}
+          />
+        ))}
+
+      {/* Счёт */}
+      {isStarted && (
+        <div style={{ position: 'absolute', top: 10, left: 10, fontWeight: 'bold', zIndex: 50 }}>
+          Score: {score}
+        </div>
+      )}
+
+      {/* Экран окончания игры */}
       {isGameOver && (
         <>
           <div
