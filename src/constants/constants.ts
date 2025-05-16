@@ -1,0 +1,9 @@
+export const GAME_WIDTH = 400;
+export const GAME_HEIGHT = 600;
+export const PLAYER_SIZE = 40;
+export const PLATFORM_WIDTH = 70;
+export const PLATFORM_HEIGHT = 17;
+export const PLATFORM_COUNT = 7;
+export const GRAVITY = 0.3;
+export const JUMP_VELOCITY = -10;
+export const TICK_RATE = 20;
