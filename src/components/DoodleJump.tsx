@@ -4,88 +4,66 @@ import {
   GAME_WIDTH,
   GRAVITY,
   JUMP_VELOCITY,
-  PLATFORM_COUNT,
   PLATFORM_HEIGHT,
   PLATFORM_WIDTH,
-  PLAYER_SIZE
+  PLAYER_SIZE,
+  TICK_RATE,
 } from '../constants/constants';
-import type { Platform } from '../types';
+import type { Platform, Direction } from '../types';
+import { generatePlatforms, isColliding } from '../utils';
 
 const leftKeys = ['ArrowLeft', 'a', 'A', 'ф', 'Ф'];
 const rightKeys = ['ArrowRight', 'd', 'D', 'в', 'В'];
 
-
-export const DoodleJump: React.FC = () => {
+const DoodleJump: React.FC = () => {
   const [playerX, setPlayerX] = useState(GAME_WIDTH / 2 - PLAYER_SIZE / 2);
   const [playerY, setPlayerY] = useState(GAME_HEIGHT - PLAYER_SIZE - 200);
   const [velocityY, setVelocityY] = useState(0);
-  const [platforms, setPlatforms] = useState<Platform[]>([]);
+  const [platforms, setPlatforms] = useState<Platform[]>(generatePlatforms());
   const [score, setScore] = useState(0);
   const [isGameOver, setIsGameOver] = useState(false);
   const [movingLeft, setMovingLeft] = useState(false);
   const [movingRight, setMovingRight] = useState(false);
-  const [highScore, setHighScore] = useState(() => {
-    return parseInt(localStorage.getItem('highScore') || '0');
-  });
-  const [direction, setDirection] = useState<'left' | 'right'>('right');
+  const [highScore, setHighScore] = useState(() => parseInt(localStorage.getItem('highScore') || '0'));
+  const [direction, setDirection] = useState<Direction>('right');
 
   const maxHeightRef = useRef(Infinity);
-  const gameRef = useRef<HTMLDivElement>(null);
+  const playerWorldYRef = useRef(playerY);
 
   const handleRestart = () => {
-    window.location.reload();
+    setPlayerX(GAME_WIDTH / 2 - PLAYER_SIZE / 2);
+    setPlayerY(GAME_HEIGHT - PLAYER_SIZE - 200);
+    setVelocityY(0);
+    setPlatforms(generatePlatforms());
+    setScore(0);
+    setIsGameOver(false);
+    maxHeightRef.current = Infinity;
   };
 
-  // Инициализация платформ
   useEffect(() => {
-    const initialPlatforms: Platform[] = [];
-    const gap = GAME_HEIGHT / PLATFORM_COUNT;
-    for (let i = 0; i < PLATFORM_COUNT; i++) {
-      initialPlatforms.push({
-        x: Math.random() * (GAME_WIDTH - PLATFORM_WIDTH),
-        y: i * gap,
-      });
-    }
-    setPlatforms(initialPlatforms);
-  }, []);
-
-  // Управление игроком влево/вправо
-
-
-  useEffect(() => {
-    function handleKeyDown(e: KeyboardEvent) {
-      const key = e.key;
-      if (leftKeys.includes(key)) setMovingLeft(true);
-      if (rightKeys.includes(key)) setMovingRight(true);
-    }
-
-    function handleKeyUp(e: KeyboardEvent) {
-      const key = e.key;
-      if (leftKeys.includes(key)) setMovingLeft(false);
-      if (rightKeys.includes(key)) setMovingRight(false);
-    }
-
-    window.addEventListener('keydown', handleKeyDown);
-    window.addEventListener('keyup', handleKeyUp);
+    const downHandler = (e: KeyboardEvent) => {
+      if (leftKeys.includes(e.key)) setMovingLeft(true);
+      if (rightKeys.includes(e.key)) setMovingRight(true);
+    };
+    const upHandler = (e: KeyboardEvent) => {
+      if (leftKeys.includes(e.key)) setMovingLeft(false);
+      if (rightKeys.includes(e.key)) setMovingRight(false);
+    };
+    window.addEventListener('keydown', downHandler);
+    window.addEventListener('keyup', upHandler);
     return () => {
-      window.removeEventListener('keydown', handleKeyDown);
-      window.removeEventListener('keyup', handleKeyUp);
+      window.removeEventListener('keydown', downHandler);
+      window.removeEventListener('keyup', upHandler);
     };
   }, []);
 
-  // Начать заново при нажатии любой кнопки
   useEffect(() => {
     if (!isGameOver) return;
-
-    function handleAnyKey() {
-      handleRestart();
-    }
-
-    window.addEventListener('keydown', handleAnyKey);
-    return () => window.removeEventListener('keydown', handleAnyKey);
+    const restartOnKey = () => handleRestart();
+    window.addEventListener('keydown', restartOnKey);
+    return () => window.removeEventListener('keydown', restartOnKey);
   }, [isGameOver]);
 
-  // Основной цикл игры
   useEffect(() => {
     const interval = setInterval(() => {
       setPlayerX((x) => {
@@ -103,32 +81,25 @@ export const DoodleJump: React.FC = () => {
 
       setPlayerY((y) => {
         let newY = y + velocityY;
+        playerWorldYRef.current += velocityY;
         setVelocityY((v) => v + GRAVITY);
 
-        // Столкновение с платформами
         platforms.forEach((p) => {
-          if (
-            newY + PLAYER_SIZE >= p.y &&
-            newY + PLAYER_SIZE <= p.y + PLATFORM_HEIGHT &&
-            playerX + PLAYER_SIZE > p.x &&
-            playerX < p.x + PLATFORM_WIDTH &&
-            velocityY > 0
-          ) {
+          if (isColliding(playerX, newY, velocityY, p, PLAYER_SIZE, PLATFORM_WIDTH, PLATFORM_HEIGHT)) {
             setVelocityY(JUMP_VELOCITY);
           }
         });
 
-        // Скролл платформ
         if (newY < GAME_HEIGHT / 2) {
-          const diff = (GAME_HEIGHT / 2) - newY;
-          setPlatforms((oldPlatforms) =>
-            oldPlatforms.map((p) => {
-              let newPy = p.y + diff;
-              if (newPy > GAME_HEIGHT) {
-                newPy = 0;
-                return { x: Math.random() * (GAME_WIDTH - PLATFORM_WIDTH), y: newPy };
+          const diff = GAME_HEIGHT / 2 - newY;
+          setPlatforms((old) =>
+            old.map((p) => {
+              let newY = p.y + diff;
+              if (newY > GAME_HEIGHT) {
+                newY = 0;
+                return { x: Math.random() * (GAME_WIDTH - PLATFORM_WIDTH), y: newY };
               }
-              return { ...p, y: newPy };
+              return { ...p, y: newY };
             })
           );
           newY = GAME_HEIGHT / 2;
@@ -136,32 +107,30 @@ export const DoodleJump: React.FC = () => {
 
         if (newY > GAME_HEIGHT) {
           setIsGameOver(true);
-
-          setHighScore((prevHighScore) => {
-            const newHighScore = Math.max(prevHighScore, score);
-            localStorage.setItem('highScore', newHighScore.toString());
-            return newHighScore;
+          setHighScore((prev) => {
+            const hs = Math.max(prev, score);
+            localStorage.setItem('highScore', hs.toString());
+            return hs;
           });
-
           return y;
         }
+
         if (maxHeightRef.current === Infinity) {
-          maxHeightRef.current = newY;
-        } else if (newY < maxHeightRef.current) {
-          setScore((prev) => prev + Math.floor(maxHeightRef.current - newY));
-          maxHeightRef.current = newY;
+          maxHeightRef.current = playerWorldYRef.current;
+        } else if (playerWorldYRef.current < maxHeightRef.current) {
+          setScore((prev) => prev + Math.floor(maxHeightRef.current - playerWorldYRef.current));
+          maxHeightRef.current = playerWorldYRef.current;
         }
 
         return newY;
       });
-    }, 20);
+    }, TICK_RATE);
 
     return () => clearInterval(interval);
   }, [velocityY, platforms, playerX, score, movingLeft, movingRight]);
 
   return (
     <div
-      ref={gameRef}
       style={{
         position: 'relative',
         width: GAME_WIDTH,
@@ -173,7 +142,6 @@ export const DoodleJump: React.FC = () => {
         zIndex: 1,
       }}
     >
-      {/* Игрок */}
       <div
         style={{
           position: 'absolute',
@@ -187,18 +155,11 @@ export const DoodleJump: React.FC = () => {
         <img
           src={direction === 'left' ? '/doodler-left.png' : '/doodler-right.png'}
           alt="player"
-          style={{
-            width: '100%',
-            height: '100%',
-            userSelect: 'none',
-            pointerEvents: 'none',
-            display: 'block',
-          }}
+          style={{ width: '100%', height: '100%', userSelect: 'none', pointerEvents: 'none' }}
           draggable={false}
         />
       </div>
 
-      {/* Платформы */}
       {platforms.map((p, i) => (
         <img
           key={i}
@@ -208,7 +169,6 @@ export const DoodleJump: React.FC = () => {
             position: 'absolute',
             width: PLATFORM_WIDTH,
             height: PLATFORM_HEIGHT,
-            // border: '1px solid black',
             left: p.x,
             top: p.y,
             borderRadius: 5,
@@ -218,17 +178,10 @@ export const DoodleJump: React.FC = () => {
         />
       ))}
 
-      {/* Счет */}
-      <div
-        style={{
-          position: 'absolute',
-          top: 10,
-          left: 10,
-          fontWeight: 'bold',
-          zIndex: 50
-        }}>
+      <div style={{ position: 'absolute', top: 10, left: 10, fontWeight: 'bold', zIndex: 50 }}>
         Score: {score}
       </div>
+
       {isGameOver && (
         <>
           <div
@@ -238,7 +191,7 @@ export const DoodleJump: React.FC = () => {
               left: 0,
               width: '100%',
               height: '100%',
-              backgroundColor: 'rgba(255, 255, 255)',
+              backgroundColor: 'white',
               zIndex: 999,
             }}
           />
@@ -262,12 +215,7 @@ export const DoodleJump: React.FC = () => {
             <p>Рекорд: {highScore}</p>
             <button
               onClick={handleRestart}
-              style={{
-                marginTop: 10,
-                padding: '10px 20px',
-                fontWeight: 'bold',
-                cursor: 'pointer',
-              }}
+              style={{ marginTop: 10, padding: '10px 20px', fontWeight: 'bold', cursor: 'pointer' }}
             >
               Сыграть снова
             </button>
@@ -277,6 +225,5 @@ export const DoodleJump: React.FC = () => {
     </div>
   );
 };
-
 
 export default DoodleJump;

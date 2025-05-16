@@ -1,4 +1,4 @@
-import { Platform } from './types';
+import type { Platform } from './types';
 import { GAME_HEIGHT, GAME_WIDTH, PLATFORM_COUNT, PLATFORM_WIDTH } from './constants/constants';
 
 export const generatePlatforms = (): Platform[] => {
